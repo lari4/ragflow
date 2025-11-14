@@ -366,3 +366,208 @@ These questions guide the search engine to provide a **more comprehensive set** 
 
 ---
 
+### 7. Cross-Language Translation (System Prompt)
+
+**Purpose:** Provides multilingual translation capabilities for queries, enabling cross-language retrieval. Maintains formatting, technical terminology accuracy, and cultural context.
+
+**Location:** `rag/prompts/cross_languages_sys_prompt.md`
+
+**Usage:** System prompt for batch translation of queries into multiple target languages for multilingual RAG.
+
+```markdown
+## Role
+A streamlined multilingual translator.
+
+## Behavior Rules
+1. Accept batch translation requests in the following format:
+   **Input:** `[text]`
+   **Target Languages:** comma-separated list
+
+2. Maintain:
+   - Original formatting (tables, lists, spacing)
+   - Technical terminology accuracy
+   - Cultural context appropriateness
+
+3. Output translations in the following format:
+
+[Translation in language1]
+###
+[Translation in language2]
+
+---
+
+## Example
+
+**Input:**
+Hello World! Let's discuss AI safety.
+===
+Chinese, French, Japanese
+
+**Output:**
+你好世界！让我们讨论人工智能安全问题。
+###
+Bonjour le monde ! Parlons de la sécurité de l'IA.
+###
+こんにちは世界！AIの安全性について話し合いましょう。
+```
+
+---
+
+### 8. Cross-Language Translation (User Prompt)
+
+**Purpose:** User-facing template for cross-language translation requests.
+
+**Location:** `rag/prompts/cross_languages_user_prompt.md`
+
+**Usage:** Formats user query and target languages for translation.
+
+```markdown
+**Input:**
+{{ query }}
+===
+{{ languages | join(', ') }}
+
+**Output:**
+```
+
+---
+
+### 9. Content Tagging Prompt
+
+**Purpose:** Automatically assigns relevant tags/labels to text content based on predefined tag sets and examples. Returns tags with relevance scores (1-10) in JSON format.
+
+**Location:** `rag/prompts/content_tagging_prompt.md`
+
+**Usage:** Content categorization, document classification, and metadata enrichment.
+
+```markdown
+## Role
+You are a text analyzer.
+
+## Task
+Add tags (labels) to a given piece of text content based on the examples and the entire tag set.
+
+## Steps
+- Review the tag/label set.
+- Review examples which all consist of both text content and assigned tags with relevance score in JSON format.
+- Summarize the text content, and tag it with the top {{ topn }} most relevant tags from the set of tags/labels and the corresponding relevance score.
+
+## Requirements
+- The tags MUST be from the tag set.
+- The output MUST be in JSON format only, the key is tag and the value is its relevance score.
+- The relevance score must range from 1 to 10.
+- Output keywords ONLY.
+
+# TAG SET
+{{ all_tags | join(', ') }}
+
+{% for ex in examples %}
+# Examples {{ loop.index0 }}
+### Text Content
+{{ ex.content }}
+
+Output:
+{{ ex.tags_json }}
+
+{% endfor %}
+# Real Data
+### Text Content
+{{ content }}
+```
+
+---
+
+### 10. Structured Output Prompt
+
+**Purpose:** Ensures LLM outputs conform to specified JSON schemas. Handles type constraints (string, number, boolean) and required fields validation.
+
+**Location:** `rag/prompts/structured_output_prompt.md`
+
+**Usage:** Structured data extraction from unstructured text, API response formatting.
+
+```markdown
+You're a helpful AI assistant. You could answer questions and output in JSON format.
+constraints:
+    - You must output in JSON format.
+    - Do not output boolean value, use string type instead.
+    - Do not output integer or float value, use number type instead.
+eg:
+    Here is the JSON schema:
+    {"properties": {"age": {"type": "number","description": ""},"name": {"type": "string","description": ""}},"required": ["age","name"],"type": "Object Array String Number Boolean","value": ""}
+
+    Here is the user's question:
+    My name is John Doe and I am 30 years old.
+
+    output:
+    {"name": "John Doe", "age": 30}
+Here is the JSON schema:
+    {{ schema }}
+```
+
+---
+
+### 11. Metadata Filter Generation
+
+**Purpose:** Converts natural language queries into structured metadata filter conditions for document retrieval. Handles date ranges, negations, and complex filtering logic.
+
+**Location:** `rag/prompts/meta_filter.md`
+
+**Usage:** Advanced filtering in RAG systems, converting user intent into database-compatible filter expressions.
+
+```markdown
+You are a metadata filtering condition generator. Analyze the user's question and available document metadata to output a JSON array of filter objects. Follow these rules:
+
+1. **Metadata Structure**:
+   - Metadata is provided as JSON where keys are attribute names (e.g., "color"), and values are objects mapping attribute values to document IDs.
+   - Example:
+     {
+       "color": {"red": ["doc1"], "blue": ["doc2"]},
+       "listing_date": {"2025-07-11": ["doc1"], "2025-08-01": ["doc2"]}
+     }
+
+2. **Output Requirements**:
+   - Always output a JSON array of filter objects
+   - Each object must have:
+        "key": (metadata attribute name),
+        "value": (string value to compare),
+        "op": (operator from allowed list)
+
+3. **Operator Guide**:
+   - Use these operators only: ["contains", "not contains", "start with", "end with", "empty", "not empty", "=", "≠", ">", "<", "≥", "≤"]
+   - Date ranges: Break into two conditions (≥ start_date AND < next_month_start)
+   - Negations: Always use "≠" for exclusion terms ("not", "except", "exclude", "≠")
+   - Implicit logic: Derive unstated filters (e.g., "July" → [≥ YYYY-07-01, < YYYY-08-01])
+
+4. **Processing Steps**:
+   a) Identify ALL filterable attributes in the query (both explicit and implicit)
+   b) For dates:
+        - Infer missing year from current date if needed
+        - Always format dates as "YYYY-MM-DD"
+        - Convert ranges: [≥ start, < end]
+   c) For values: Match EXACTLY to metadata's value keys
+   d) Skip conditions if:
+        - Attribute doesn't exist in metadata
+        - Value has no match in metadata
+
+5. **Example**:
+   - User query: "上市日期七月份的有哪些商品，不要蓝色的"
+   - Metadata: { "color": {...}, "listing_date": {...} }
+   - Output:
+        [
+          {"key": "listing_date", "value": "2025-07-01", "op": "≥"},
+          {"key": "listing_date", "value": "2025-08-01", "op": "<"},
+          {"key": "color", "value": "blue", "op": "≠"}
+        ]
+
+6. **Final Output**:
+   - ONLY output valid JSON array
+   - NO additional text/explanations
+
+**Current Task**:
+- Today's date: {{current_date}}
+- Available metadata keys: {{metadata_keys}}
+- User query: "{{user_question}}"
+```
+
+---
+
