@@ -1140,3 +1140,220 @@ You are an AI assistant designed to analyze text content and detect whether a ta
 
 ---
 
+## GraphRAG Prompts
+
+### 26. Entity & Relationship Extraction (GraphRAG)
+
+**Purpose:** Microsoft GraphRAG-based entity and relationship extraction. Identifies entities with types/descriptions and relationships with strength scores. Uses structured tuple format with delimiters.
+
+**Location:** `graphrag/general/graph_prompt.py` - `GRAPH_EXTRACTION_PROMPT`
+
+**Usage:** Core knowledge graph construction from text, creates entity-relationship triples for graph databases.
+
+**Key Features:**
+- Entity extraction with name, type, and comprehensive description
+- Relationship extraction with source, target, description, and strength score (1-10)
+- Multi-example few-shot learning (3 detailed examples)
+- Tuple delimiter format: `("entity"|"relationship"<|>field1<|>field2...)`
+- Record delimiter: `##`, Completion delimiter: `<|COMPLETE|>`
+- Entity types: person, technology, mission, organization, location, role, event, concept
+
+---
+
+### 27. Entity & Relationship Extraction (LightRAG)
+
+**Purpose:** LightRAG/MiniRAG-enhanced entity extraction with relationship keywords and content-level keywords. Adds semantic summarization to standard GraphRAG extraction.
+
+**Location:** `graphrag/light/graph_prompt.py` - `entity_extraction`
+
+**Usage:** Enhanced knowledge graph construction with semantic indexing capabilities.
+
+**Improvements over GraphRAG:**
+- **Relationship Keywords**: High-level concepts/themes (e.g., "power dynamics, perspective shift")
+- **Content Keywords**: Document-level key concepts for semantic search
+- More diverse entity types: company, index, commodity, market_trend, economic_policy, biological, athlete, equipment, record
+- Three detailed examples (tech/discovery, financial markets, sports)
+
+---
+
+### 28. Community Report Generation
+
+**Purpose:** Generates comprehensive reports for entity communities in knowledge graphs. Analyzes community structure, entity relationships, and impact severity.
+
+**Location:** `graphrag/general/community_report_prompt.py` - `COMMUNITY_REPORT_PROMPT`
+
+**Usage:** Community detection and analysis in GraphRAG, creates executive summaries for entity clusters.
+
+**Output Structure (JSON):**
+- **Title**: Short, specific community name with representative entities
+- **Summary**: Executive summary of structure and relationships
+- **Impact Severity Rating**: 0-10 float score
+- **Rating Explanation**: Single sentence justification
+- **Detailed Findings**: 5-10 key insights with summaries and grounded explanations
+
+**Grounding Rules:**
+- Data references: `[Data: <dataset> (record IDs)]`
+- Max 5 record IDs per reference, use "+more" for additional
+- Only include verifiable, evidence-backed information
+
+---
+
+### 29. Mind Map Extraction
+
+**Purpose:** Converts text into hierarchical mind map structure with Markdown formatting. Generates title, sections, sub-sections, and content summaries.
+
+**Location:** `graphrag/general/mind_map_prompt.py` - `MIND_MAP_EXTRACTION_PROMPT`
+
+**Usage:** Document summarization and visualization, creates navigable content hierarchy.
+
+**Requirements:**
+- Minimum 4 hierarchy levels
+- Maximize number of sub-sections for complex subjects
+- Bottom-level sections include content summaries
+- Output in Markdown format, maintains original language
+
+---
+
+### 30. Entity Description Summarization
+
+**Purpose:** Consolidates multiple entity descriptions into single coherent summary. Resolves contradictions and merges information from various sources.
+
+**Location:** `graphrag/light/graph_prompt.py` - `summarize_entity_descriptions`
+
+**Usage:** Entity resolution in knowledge graphs, merges duplicate/overlapping entity information.
+
+**Additional GraphRAG Prompts (brief summary):**
+- **Query to Keywords** (`minirag_query2kwd`): Extracts answer types and entity keywords from queries
+- **Keywords Extraction** (`keywords_extraction`): High-level and low-level keyword extraction
+- **Entity Continue Extraction** (`entity_continue_extraction`): Continues extraction for missed entities
+- **Entity Loop Check** (`entity_if_loop_extraction`): Determines if more entities remain
+- **RAG Response** (`rag_response`): Generates responses using KG + document chunks
+- **Naive RAG Response** (`naive_rag_response`): Document-only RAG without graph
+- **Fail Response** (`fail_response`): Fallback when no context available
+
+---
+
+## Agentic Reasoning Prompts
+
+### 31. Multi-Hop Reasoning with Search
+
+**Purpose:** Advanced reasoning agent that decomposes complex questions into verifiable search steps. Supports multi-hop question answering with iterative fact gathering.
+
+**Location:** `agentic_reasoning/prompts.py` - `REASON_PROMPT`
+
+**Usage:** Complex question answering requiring multiple information retrieval steps.
+
+**Key Features:**
+- **Special Tokens**: `<|begin_search_query|>`, `<|end_search_query|>`, `<|begin_search_result|>`, `<|end_search_result|>`
+- **Search Limit**: Maximum 6 search attempts
+- **Step-by-Step Reasoning**: One fact at a time approach
+- **Examples**: Multi-hop (Jaws vs Casino Royale directors), Simple fact retrieval (craigslist founder)
+
+**Workflow:**
+1. Analyze user's question
+2. Issue targeted search query for specific fact
+3. Review search results
+4. Repeat until sufficient information gathered
+5. Synthesize facts and provide final answer
+
+**Rules:**
+- One fact per search query
+- Precise, clear search formulation
+- Synthesize only after all searches complete
+- Language consistency with user's question
+
+---
+
+### 32. Relevant Information Extraction
+
+**Purpose:** Extracts single most relevant piece of information from search results to answer current search query. Focused, concise fact extraction module.
+
+**Location:** `agentic_reasoning/prompts.py` - `RELEVANT_EXTRACTION_PROMPT`
+
+**Usage:** Post-processes search results in reasoning chains, filters noise from retrieved documents.
+
+**Input:**
+- Previous reasoning steps (context only)
+- Current search query
+- Searched web pages
+
+**Output Format:**
+- **If answer found**: `Final Information\n[extracted fact]`
+- **If no answer**: `Final Information\nNo helpful information found.`
+
+**Rules:**
+- Focus exclusively on current search query
+- Ignore previous reasoning steps in output
+- Be concise, extract only essential facts
+- No conversational text, direct factual extraction only
+
+---
+
+## Agent Template Prompts
+
+RAGFlow includes 24 pre-built agent workflow templates in `agent/templates/` (JSON format) with embedded prompts and personas:
+
+**Research & Analysis:**
+- **Deep Research** (`deep_research.json`): Multi-agent research with Strategy Research Director (20y experience), Web Search Specialist, Content Reader, Research Synthesizer - produces McKinsey-style reports
+- **Deep Search with Reasoning** (`deep_search_r.json`): Deep search with agentic reasoning
+- **Knowledge Base Report** (`knowledge_base_report.json`): KB analysis and comprehensive reporting
+- **Stock Research Report** (`stock_research_report.json`): Financial/market analysis
+
+**Business Applications:**
+- **Customer Service** (`customer_service.json`): Customer support agent
+- **Customer Review Analysis** (`customer_review_analysis.json`): Sentiment and feedback analysis
+- **CV Analysis** (`cv_analysis_and_candidate_evaluation.json`): Resume screening and candidate evaluation
+- **Email Assistant** (`email_assistant.json`): Email composition and management
+
+**Content Creation:**
+- **SEO Blog Generator** (`generate_SEO_blog.json`): Search-optimized blog writing
+- **Slogan Generator** (`slogan_generator.json`): Marketing slogan creation
+- **Technical Support Request** (`technical_support_request.json`): Support ticket handling
+
+**Data & Code:**
+- **SQL Assistant** (`sql_assistant.json`): SQL query generation and database interaction
+- **Arxiv Research** (`arxiv_research.json`): Academic paper search and analysis
+- **Python Coder** (`python_coder.json`): Code generation assistant
+
+**Other Templates:**
+- Trip Planner, Paper Proofreading, Reading Companion, Sourcing Agent, Math Tutor, Technical Documentation QA, Multi-Agent Debate, Story Writer, Corrector, and more
+
+Each template defines:
+- Agent personas and system prompts
+- Tool orchestration (Retrieval, LLM, Categorize, Web Search, SQL, etc.)
+- Workflow graph (nodes and edges)
+- Parameter configurations
+
+---
+
+## Summary
+
+**Total Documented Prompts: 32 categories + 24 agent templates**
+
+**By Theme:**
+- **RAG & Chat**: 11 prompts (citations, questions, keywords, filters, tagging, translation)
+- **Agent Workflows**: 8 prompts (task analysis, planning, reflection, memory management)
+- **Document Processing**: 6 prompts (vision LLM, TOC detection/extraction)
+- **GraphRAG**: 5+ prompts (entity extraction, community reports, mind maps)
+- **Agentic Reasoning**: 2 prompts (multi-hop reasoning, information extraction)
+- **Agent Templates**: 24 pre-built workflow templates
+
+**Key Technologies:**
+- Jinja2 templating for dynamic content
+- JSON/Markdown structured outputs
+- Multi-language support
+- Token budget management
+- Streaming and batch processing
+
+**Primary Use Cases:**
+- Retrieval-Augmented Generation (RAG)
+- Knowledge Graph Construction
+- Multi-Agent Workflows
+- Document Understanding
+- Complex Question Answering
+- Content Generation & Analysis
+
+---
+
+*For implementation details, see `rag/prompts/generator.py` (prompt application functions) and `rag/prompts/template.py` (prompt loading utilities).*
+
