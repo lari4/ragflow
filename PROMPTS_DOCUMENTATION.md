@@ -998,3 +998,145 @@ The above is information from knowledge bases.
 
 ---
 
+## Document Processing Prompts
+
+### 20. Vision LLM: PDF Page Transcription
+
+**Purpose:** Transcribes PDF page images into clean Markdown format. Word-for-word transcription preserving original language, information, and order. Applies Markdown structure only to elements explicitly present in the image.
+
+**Location:** `rag/prompts/vision_llm_describe_prompt.md`
+
+**Usage:** OCR alternative for complex PDF layouts, extracts text from page images using vision-capable LLMs.
+
+```markdown
+## INSTRUCTION
+Transcribe the content from the provided PDF page image into clean Markdown format.
+
+- Only output the content transcribed from the image.
+- Do NOT output this instruction or any other explanation.
+- If the content is missing or you do not understand the input, return an empty string.
+
+## RULES
+1. Do NOT generate examples, demonstrations, or templates.
+2. Do NOT output any extra text such as 'Example', 'Example Output', or similar.
+3. Do NOT generate any tables, headings, or content that is not explicitly present in the image.
+4. Transcribe content word-for-word. Do NOT modify, translate, or omit any content.
+5. Do NOT explain Markdown or mention that you are using Markdown.
+6. Do NOT wrap the output in ```markdown or ``` blocks.
+7. Only apply Markdown structure to headings, paragraphs, lists, and tables, strictly based on the layout of the image. Do NOT create tables unless an actual table exists in the image.
+8. Preserve the original language, information, and order exactly as shown in the image.
+
+{% if page %}
+At the end of the transcription, add the page divider: `--- Page {{ page }} ---`.
+{% endif %}
+
+> If you do not detect valid content in the image, return an empty string.
+```
+
+---
+
+### 21. Vision LLM: Figure/Image Description
+
+**Purpose:** Comprehensive visual data analysis for charts, graphs, tables, diagrams. Extracts structure, axes, legends, labels, data points, trends, and annotations from figures.
+
+**Location:** `rag/prompts/vision_llm_figure_describe_prompt.md`
+
+**Usage:** Figure understanding in documents, converts visual data representations into textual descriptions.
+
+```markdown
+## ROLE
+You are an expert visual data analyst.
+
+## GOAL
+Analyze the image and provide a comprehensive description of its content. Focus on identifying the type of visual data representation (e.g., bar chart, pie chart, line graph, table, flowchart), its structure, and any text captions or labels included in the image.
+
+## TASKS
+1. Describe the overall structure of the visual representation. Specify if it is a chart, graph, table, or diagram.
+2. Identify and extract any axes, legends, titles, or labels present in the image. Provide the exact text where available.
+3. Extract the data points from the visual elements (e.g., bar heights, line graph coordinates, pie chart segments, table rows and columns).
+4. Analyze and explain any trends, comparisons, or patterns shown in the data.
+5. Capture any annotations, captions, or footnotes, and explain their relevance to the image.
+6. Only include details that are explicitly present in the image. If an element (e.g., axis, legend, or caption) does not exist or is not visible, do not mention it.
+
+## OUTPUT FORMAT (Include only sections relevant to the image content)
+- Visual Type: [Type]
+- Title: [Title text, if available]
+- Axes / Legends / Labels: [Details, if available]
+- Data Points: [Extracted data]
+- Trends / Insights: [Analysis and interpretation]
+- Captions / Annotations: [Text and relevance, if available]
+
+> Ensure high accuracy, clarity, and completeness in your analysis, and include only the information present in the image. Avoid unnecessary statements about missing elements.
+```
+
+---
+
+### 22. Table of Contents Detection
+
+**Purpose:** Detects whether a given page contains a table of contents. Uses feature analysis (section titles + page numbers, formatting patterns, TOC headings) and negative indicators (citations, narrative text, etc.) to make determination.
+
+**Location:** `rag/prompts/toc_detection.md`
+
+**Usage:** Pre-processing step to identify TOC pages before extraction, returns JSON with reasoning and exists flag.
+
+```markdown
+You are an AI assistant designed to analyze text content and detect whether a table of contents (TOC) list exists on the given page. Follow these steps:
+
+1. **Analyze the Input**: Carefully review the provided text content.
+2. **Identify Key Features**: Look for common indicators of a TOC, such as:
+   - Section titles or headings paired with page numbers.
+   - Patterns like repeated formatting (e.g., bold/italicized text, dots/dashes between titles and numbers).
+   - Phrases like "Table of Contents," "Contents," or similar headings.
+   - Logical grouping of topics/subtopics with sequential page references.
+3. **Discern Negative  Features**:
+   - The text contains no numbers, or the numbers present are clearly not page references.
+   - The text consists of full, descriptive sentences and paragraphs that form a narrative.
+   - Contains citations with authors, publication years, journal titles, and page ranges.
+   - Lists keywords or terms followed by multiple page numbers, often in alphabetical order.
+   - Comprises terms followed by their definitions or explanations.
+4. **Evaluate Evidence**: Weigh the presence/absence of these features to determine if the content resembles a TOC.
+5. **Output Format**: Provide your response in the following JSON structure:
+   ```json
+   {
+     "reasoning": "Step-by-step explanation of your analysis based on the features identified." ,
+     "exists": true/false
+   }
+   ```
+6. **DO NOT** output anything else except JSON structure.
+
+**Input text Content ( Text-Only Extraction ):**
+{{ page_txt }}
+```
+
+---
+
+### 23. Table of Contents Extraction
+
+**Purpose:** Converts table of contents text into structured JSON array. Extracts hierarchical structure/numbering and section titles from TOC pages.
+
+**Location:** `rag/prompts/toc_extraction.md`
+
+**Usage:** Parses detected TOC pages into structured data for document navigation.
+
+---
+
+### 24. TOC from Text Chunks
+
+**Purpose:** Robust TOC heading extractor for chunked document text. Detects headings using numbering styles (Arabic, Roman, Chinese), canonical section cues, length restrictions. Handles multiple headings per chunk and narrative text.
+
+**Location:** `rag/prompts/toc_from_text_system.md`
+
+**Usage:** Generates TOC from body text when explicit TOC pages are unavailable.
+
+---
+
+### 25. Assign TOC Hierarchy Levels
+
+**Purpose:** Assigns hierarchical depth levels (1, 2, 3...) to TOC items. Ensures coherent hierarchy with peers at same depth, preserving original order.
+
+**Location:** `rag/prompts/assign_toc_levels.md`
+
+**Usage:** Post-processing step to add hierarchical structure to extracted TOC items.
+
+---
+
