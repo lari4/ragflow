@@ -496,3 +496,393 @@ User Task Request
 
 ---
 
+## GraphRAG Pipeline
+
+### Overview
+Knowledge graph construction pipeline using entity extraction, relationship identification, community detection, and graph-based retrieval for complex queries.
+
+### Architecture Diagram
+```
+Document Text
+    │
+    ▼
+┌─────────────────────────┐
+│ Entity & Relationship   │ ◄── Prompts: entity_extraction (LightRAG)
+│ Extraction             │          or GRAPH_EXTRACTION_PROMPT (GraphRAG)
+├─────────────────────────┤
+│ Output:                 │     Extracts:
+│ - Entities: (name,     │     - Entities with types & descriptions
+│   type, description)    │     - Relationships with strength scores
+│ - Relationships:        │     - Content keywords (LightRAG only)
+│   (source, target,     │
+│   description, keywords,│     Formats: Tuple delimiters
+│   strength)            │     ("entity"<|>Name<|>Type<|>Desc)
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Entity Resolution       │ ◄── Prompt: summarize_entity_descriptions
+├─────────────────────────┤
+│ - Merge duplicate       │     Consolidates multiple descriptions
+│   entities             │     of same entity into coherent summary
+│ - Resolve contradictions│
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Graph Construction      │     Stores in graph database:
+├─────────────────────────┤     - Nodes: Entities
+│ - Create nodes          │     - Edges: Relationships
+│ - Create edges          │     - Properties: Descriptions, types,
+│ - Store in graph DB     │       keywords, strength scores
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Community Detection     │ ◄── Microsoft GraphRAG: Leiden algorithm
+├─────────────────────────┤
+│ - Identify entity       │     Groups related entities into
+│   clusters             │     hierarchical communities
+│ - Build hierarchy       │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Community Report        │ ◄── Prompt: COMMUNITY_REPORT_PROMPT
+│ Generation             │
+├─────────────────────────┤     Generates JSON report:
+│ - Title & summary       │     - Community title
+│ - Impact rating (0-10)  │     - Executive summary
+│ - Key findings (5-10)   │     - Impact severity rating
+│ - Grounded citations    │     - Detailed findings with citations
+└────────────┬────────────┘
+             │
+             ▼
+    [Knowledge Graph Ready]
+             │
+             │ User Query
+             ▼
+┌─────────────────────────┐
+│ Query Processing        │ ◄── Prompts: minirag_query2kwd,
+├─────────────────────────┤          keywords_extraction
+│ - Extract query keywords│
+│ - Identify entities     │     Converts NL query to:
+│ - Determine answer types│     - Entity keywords
+└────────────┬────────────┘     - High/low level keywords
+             │
+             ▼
+┌─────────────────────────┐
+│ Graph Traversal         │     Retrieval modes:
+├─────────────────────────┤     - Naive: Document chunks only
+│ - Find related entities │     - Local: Direct entity neighbors
+│ - Traverse relationships│     - Global: Community summaries
+│ - Retrieve communities  │     - Hybrid: Combines all modes
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Response Generation     │ ◄── Prompts: rag_response,
+├─────────────────────────┤          naive_rag_response,
+│ - Combine KG + docs     │          fail_response
+│ - Generate answer       │
+│ - Add graph citations   │     Input: KG context + document chunks
+└─────────────────────────┘     Output: Grounded response
+```
+
+### Key Prompts
+1. **entity_extraction** (LightRAG): Enhanced extraction with keywords
+2. **GRAPH_EXTRACTION_PROMPT** (GraphRAG): Standard entity/relation extraction
+3. **summarize_entity_descriptions**: Entity resolution
+4. **COMMUNITY_REPORT_PROMPT**: Community analysis
+5. **rag_response**: Graph-aware response generation
+
+---
+
+## Document Processing Pipeline
+
+### Overview
+Converts PDF documents into structured, searchable content through vision LLM processing, TOC extraction, and intelligent chunking.
+
+### Architecture Diagram
+```
+PDF Document
+    │
+    ▼
+┌─────────────────────────┐
+│ Page Image Extraction   │     Converts PDF pages to images
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Vision LLM Processing   │ ◄── Prompts:
+├─────────────────────────┤       - vision_llm_describe_prompt.md
+│ For each page:          │       - vision_llm_figure_describe_prompt.md
+│ - Transcribe text       │
+│ - Extract figures/tables│     Outputs clean Markdown with:
+│ - Preserve structure    │     - Text content (word-for-word)
+└────────────┬────────────┘     - Figure descriptions
+             │                  - Table structures
+             ▼
+┌─────────────────────────┐
+│ TOC Detection           │ ◄── Prompt: toc_detection.md
+├─────────────────────────┤
+│ Analyze pages for TOC:  │     Returns JSON: {"exists": true/false,
+│ - Section titles        │                    "reasoning": "..."}
+│ - Page numbers          │
+│ - Formatting patterns   │     Negative indicators: citations,
+└────────────┬────────────┘     narrative text, definitions
+             │
+     ┌───────┴───────┐
+     ▼               ▼
+[TOC Exists]    [No TOC]
+     │               │
+     ▼               ▼
+┌─────────────┐ ┌─────────────────────┐
+│TOC Extract. │ │TOC from Text Chunks │ ◄── Prompt:
+├─────────────┤ ├─────────────────────┤       toc_from_text_system.md
+│Parse TOC    │ │Detect headings from │
+│pages       │ │document body       │     Heading detection:
+└──────┬──────┘ └────────┬────────────┘     - Numbering patterns
+       │                  │                  - Chinese/English styles
+       │                  │                  - Canonical section cues
+       └────────┬─────────┘
+                ▼
+     ┌─────────────────────┐
+     │ TOC Structuring     │ ◄── Prompts:
+     ├─────────────────────┤       - toc_extraction.md
+     │ - Parse structure   │       - assign_toc_levels.md
+     │ - Assign levels     │
+     │ - Build hierarchy   │     Output: JSON with structure & levels
+     └────────┬────────────┘
+              │
+              ▼
+┌─────────────────────────┐
+│ Intelligent Chunking    │     Chunking strategies:
+├─────────────────────────┤     - By TOC sections
+│ - Section-based chunks  │     - Fixed token size
+│ - Overlap management    │     - Semantic boundaries
+│ - Metadata attachment   │
+└────────────┬────────────┘     Metadata: section title, page#,
+             │                  hierarchy level
+             ▼
+┌─────────────────────────┐
+│ Vector Embedding        │     Index chunks with:
+├─────────────────────────┤     - Text embeddings
+│ - Embed chunks          │     - TOC metadata
+│ - Store in vector DB    │     - Figure/table markers
+└─────────────────────────┘
+```
+
+### Key Prompts
+1. **vision_llm_describe_prompt.md**: Page transcription
+2. **vision_llm_figure_describe_prompt.md**: Figure analysis
+3. **toc_detection.md**: TOC identification
+4. **toc_extraction.md**: Parse TOC structure
+5. **toc_from_text_system.md**: Generate TOC from body text
+6. **assign_toc_levels.md**: Hierarchy assignment
+
+---
+
+## Agentic Reasoning Pipeline
+
+### Overview
+Multi-hop question answering with iterative search and fact verification, based on ReAct pattern with search tool.
+
+### Architecture Diagram
+```
+Complex Question (e.g., "Are directors of Jaws and Casino Royale from same country?")
+    │
+    ▼
+┌─────────────────────────┐
+│ Reasoning Agent         │ ◄── Prompt: REASON_PROMPT
+├─────────────────────────┤
+│ Decompose question into │     Special tokens:
+│ verifiable facts       │     <|begin_search_query|>
+└────────────┬────────────┘     <|end_search_query|>
+             │                  <|begin_search_result|>
+             │                  <|end_search_result|>
+             ▼
+        [Reasoning Loop - Max 6 iterations]
+             │
+    ┌────────┴────────┐
+    ▼                 ▼
+┌──────────┐    ┌────────────┐
+│ Thought  │───>│ Search     │
+│ (What    │    │ <|begin_   │
+│  fact    │    │  search_   │
+│  needed?)│    │  query|>   │
+└──────────┘    │  ...       │
+                │ <|end_...│>│
+                └──────┬─────┘
+                       │
+                       ▼
+                ┌────────────────┐
+                │ Web Search     │
+                │ (Tavily/DDG)   │
+                └──────┬─────────┘
+                       │
+                       ▼
+                ┌────────────────┐
+                │ Extract Info   │ ◄── Prompt: RELEVANT_EXTRACTION_PROMPT
+                ├────────────────┤
+                │ <|begin_search │     Extracts single most relevant fact
+                │  _result|>     │     from search results
+                │ [Fact]        │
+                │ <|end_...│>   │     Output:
+                └──────┬─────────┘     "Final Information\n[fact]"
+                       │                OR
+                       │               "Final Information\nNo helpful
+                       │                information found."
+                       ▼
+                ┌────────────────┐
+                │ Accumulate     │
+                │ Facts          │
+                └──────┬─────────┘
+                       │
+                ┌──────┴──────┐
+                ▼             ▼
+          [More facts    [All facts
+           needed]        gathered]
+                │             │
+                └─────┬───────┘
+                      ▼
+              ┌──────────────┐
+              │ Synthesize   │
+              │ Final Answer │
+              └──────────────┘
+
+Example Flow:
+Q: "Are directors of Jaws & Casino Royale from same country?"
+
+Step 1: Who directed Jaws?
+  Search → "Steven Spielberg"
+Step 2: Where is Spielberg from?
+  Search → "USA"
+Step 3: Who directed Casino Royale?
+  Search → "Martin Campbell"
+Step 4: Where is Campbell from?
+  Search → "New Zealand"
+Synthesize: "No, Spielberg (USA) ≠ Campbell (New Zealand)"
+```
+
+### Key Prompts
+1. **REASON_PROMPT**: Multi-hop reasoning with search
+2. **RELEVANT_EXTRACTION_PROMPT**: Fact extraction from search results
+
+---
+
+## Deep Research Agent Pipeline (Example)
+
+### Overview
+Complex multi-agent workflow from `agent/templates/deep_research.json` demonstrating hierarchical agent orchestration.
+
+### Architecture Diagram
+```
+User Research Query
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Research Director (Coordinator Agent)                        │
+│ Persona: "Strategy Research Director, 20 years consulting"  │
+└────────────┬────────────────────────────────────────────────┘
+             │
+             │ Delegates to specialized agents:
+             ▼
+    ┌────────┴────────┐
+    ▼                 ▼
+┌──────────────┐ ┌──────────────────┐
+│ Web Search   │ │ Content Reader   │
+│ Specialist   │ │ Agent           │
+├──────────────┤ ├──────────────────┤
+│ - Formulate  │ │ - Deep analyze   │
+│   queries    │ │   retrieved docs │
+│ - Execute    │ │ - Extract key    │
+│   searches   │ │   insights      │
+│ - Rank       │ │ - Identify gaps  │
+│   results    │ │                 │
+└──────┬───────┘ └────────┬─────────┘
+       │                   │
+       │                   │
+       └────────┬──────────┘
+                ▼
+       ┌────────────────┐
+       │ Research       │
+       │ Synthesizer    │
+       ├────────────────┤
+       │ - Combine      │
+       │   findings     │
+       │ - Identify     │
+       │   patterns     │
+       │ - Structure    │
+       │   report       │
+       └────────┬───────┘
+                │
+                ▼
+       ┌────────────────┐
+       │ Report Writer  │
+       ├────────────────┤
+       │ Format:        │
+       │ - Executive    │
+       │   Summary      │
+       │ - Key Findings │
+       │ - Analysis     │
+       │ - Conclusions  │
+       │ - McKinsey     │
+       │   style        │
+       └────────────────┘
+
+Components Used:
+- Categorize: Route queries to appropriate specialists
+- WebSearch: Tavily/DuckDuckGo integration
+- Retrieval: Internal KB search
+- LLM: Text analysis and generation
+- Message: Inter-agent communication
+```
+
+### Workflow
+1. **Director analyzes** research question complexity
+2. **Categorizes** into research domains
+3. **Delegates** to Web Search Specialist for each domain
+4. **Content Reader** deep-dives into retrieved articles
+5. **Synthesizer** combines findings across domains
+6. **Report Writer** formats final McKinsey-style report
+7. **Director** reviews and delivers to user
+
+### Key Features
+- Multi-agent collaboration
+- Role-based personas
+- Hierarchical delegation
+- Specialized tool usage per agent
+- Structured output formatting
+
+---
+
+## Summary
+
+This document has covered the major pipelines in RAGFlow:
+
+1. **Basic RAG**: Query → Retrieval → Generation → Citation
+2. **Agent Workflow**: Analysis → Planning → Execution → Reflection (ReAct loop)
+3. **GraphRAG**: Extraction → Graph Construction → Community Detection → Query
+4. **Document Processing**: Vision LLM → TOC → Chunking → Indexing
+5. **Agentic Reasoning**: Multi-hop reasoning with iterative search
+6. **Multi-Agent Example**: Deep Research with hierarchical agent coordination
+
+Each pipeline demonstrates different orchestration patterns:
+- **Sequential**: Document processing (page-by-page)
+- **Parallel**: Agent tool execution (concurrent searches)
+- **Iterative**: Agent ReAct loop (plan-execute-reflect)
+- **Hierarchical**: Multi-agent delegation (coordinator + specialists)
+- **Adaptive**: Complexity-aware processing (LOW/MEDIUM/HIGH handling)
+
+For implementation details, refer to:
+- `rag/prompts/generator.py`: Prompt application functions
+- `agent/component/`: Agent components
+- `agent/templates/`: Pre-built workflows
+- `graphrag/`: Knowledge graph construction
+- `deepdoc/`: Document processing
+
+---
+
+*For the complete list of prompts and their detailed specifications, see PROMPTS_DOCUMENTATION.md*
+
